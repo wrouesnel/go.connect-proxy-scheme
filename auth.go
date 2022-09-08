@@ -1,13 +1,13 @@
 // Copyright 2016 Michal Witkowski. All Rights Reserved.
 // See LICENSE for licensing terms.
 
-package http_dialer
+package connect_proxy_scheme
 
 import "encoding/base64"
 
 const (
 	hdrProxyAuthResp = "Proxy-Authorization"
-	hdrProxyAuthReq = "Proxy-Authenticate"
+	hdrProxyAuthReq  = "Proxy-Authenticate"
 )
 
 // ProxyAuthorization allows for plugging in arbitrary implementations of the "Proxy-Authorization" handler.
