@@ -1,5 +1,5 @@
-[![Build and Test](https://github.com/wrouesnel/poller_exporter/actions/workflows/integration.yml/badge.svg)](https://github.com/wrouesnel/poller_exporter/actions/workflows/integration.yml)
-[![Coverage Status](https://coveralls.io/repos/github/wrouesnel/poller_exporter/badge.svg?branch=main)](https://coveralls.io/github/wrouesnel/poller_exporter?branch=main)
+[![Build and Test](https://github.com/wrouesnel/go.connect-proxy-scheme/actions/workflows/integration.yml/badge.svg)](https://github.com/wrouesnel/go.connect-proxy-scheme/actions/workflows/integration.yml)
+[![Coverage Status](https://coveralls.io/repos/github/wrouesnel/go.connect-proxy-scheme/badge.svg?branch=main)](https://coveralls.io/github/wrouesnel/go.connect-proxy-scheme?branch=main)
 
 # HTTP Connect Scheme Support for golang.org/x/net/proxy
 
