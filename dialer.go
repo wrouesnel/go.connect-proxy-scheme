@@ -3,12 +3,13 @@
 
 // Package http_dialer provides HTTP(S) CONNECT tunneling net.Dialer. It allows you to
 // establish arbitrary TCP connections (as long as your proxy allows them) through a HTTP(S) CONNECT point.
-package connect_proxy_scheme
+package connect_proxy_scheme //nolint:revive
 
 import (
 	"bufio"
 	"context"
 	"fmt"
+
 	"golang.org/x/net/proxy"
 
 	"net"

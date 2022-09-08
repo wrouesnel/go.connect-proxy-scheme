@@ -2,15 +2,16 @@ package connect_proxy_scheme_test
 
 import (
 	"fmt"
-	"github.com/elazarl/goproxy"
-	"github.com/samber/lo"
-	connect_proxy_scheme "github.com/wrouesnel/go-connect-proxy-scheme"
-	"golang.org/x/net/proxy"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/elazarl/goproxy"
+	"github.com/samber/lo"
+	connect_proxy_scheme "github.com/wrouesnel/go-connect-proxy-scheme"
+	"golang.org/x/net/proxy"
 
 	. "gopkg.in/check.v1"
 )
@@ -27,9 +28,8 @@ func GetHttpClient(proxy proxy.ContextDialer) http.Client {
 func Test(t *testing.T) { TestingT(t) }
 
 type DialerSuite struct {
-	serverAddr string
-	server     *httptest.Server
-	proxy      *httptest.Server
+	server *httptest.Server
+	proxy  *httptest.Server
 }
 
 var _ = Suite(&DialerSuite{})

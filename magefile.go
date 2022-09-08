@@ -369,7 +369,7 @@ func init() {
 
 		finfos, err := ioutil.ReadDir(cmdDir)
 		if err != nil {
-			panic(err)
+			return results
 		}
 		for _, finfo := range finfos {
 			results = append(results, finfo.Name())
