@@ -1,4 +1,4 @@
-module github.com/wrouesnel/go-connect-proxy-scheme
+module github.com/wrouesnel/go.connect-proxy-scheme
 
 go 1.18
 
