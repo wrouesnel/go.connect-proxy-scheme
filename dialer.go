@@ -7,66 +7,70 @@ package connect_proxy_scheme
 
 import (
 	"bufio"
-	"crypto/tls"
+	"context"
 	"fmt"
 	"golang.org/x/net/proxy"
+
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-type opt func(*HttpTunnel)
-
-// New constructs an HttpTunnel to be used a net.Dial command.
+// New constructs an HttpConnectTunnel to be used a net.Dial command.
 // The first parameter is a proxy URL, for example https://foo.example.com:9090 will use foo.example.com as proxy on
 // port 9090 using TLS for connectivity.
-// Optional customization parameters are available, e.g.: WithTls, WithDialer, WithConnectionTimeout
-func New(proxyUrl *url.URL, dialer proxy.Dialer) *HttpTunnel {
-	t := &HttpTunnel{
+func New(proxyUrl *url.URL, dialer proxy.Dialer) (*HttpConnectTunnel, error) {
+	t := &HttpConnectTunnel{
 		parentDialer: dialer,
+		proxyScheme:  proxyUrl.Scheme,
+		proxyHost:    proxyUrl.Hostname(),
+		proxyPort:    proxyUrl.Port(),
+		proxyPath:    proxyUrl.Path,
 	}
-	t.parseProxyUrl(proxyUrl)
-	return t
+
+	if t.proxyPort == "" {
+		if t.proxyScheme == "https" {
+			t.proxyPort = "443"
+		} else {
+			t.proxyPort = "8080"
+		}
+	}
+
+	return t, nil
 }
 
-// HttpTunnel represents a configured HTTP Connect Tunnel dialer.
-type HttpTunnel struct {
+func ConnectProxy(proxyUrl *url.URL, dialer proxy.Dialer) (proxy.Dialer, error) {
+	return New(proxyUrl, dialer)
+}
+
+var _ = proxy.Dialer(HttpConnectTunnel{})
+var _ = proxy.ContextDialer(HttpConnectTunnel{})
+
+// HttpConnectTunnel represents a configured HTTP Connect Tunnel dialer.
+type HttpConnectTunnel struct {
 	parentDialer proxy.Dialer
-	isTls        bool
-	proxyAddr    string
-	tlsConfig    *tls.Config
+	proxyScheme  string
+	proxyHost    string
+	proxyPort    string
+	proxyPath    string
 	auth         ProxyAuthorization
 }
 
-func (t HttpTunnel) parseProxyUrl(proxyUrl *url.URL) {
-	t.proxyAddr = proxyUrl.Host
-	if strings.ToLower(proxyUrl.Scheme) == "https" {
-		if !strings.Contains(t.proxyAddr, ":") {
-			t.proxyAddr = t.proxyAddr + ":443"
-		}
-		t.isTls = true
+func (t HttpConnectTunnel) dialProxy(ctx context.Context) (net.Conn, error) {
+	// TODO: TLS proxy support
+	if f, ok := t.parentDialer.(proxy.ContextDialer); ok {
+		return f.DialContext(ctx, "tcp", net.JoinHostPort(t.proxyHost, t.proxyPort))
 	} else {
-		if !strings.Contains(t.proxyAddr, ":") {
-			t.proxyAddr = t.proxyAddr + ":8080"
-		}
-		t.isTls = false
+		return dialContext(ctx, t.parentDialer, "tcp", net.JoinHostPort(t.proxyHost, t.proxyPort))
 	}
 }
 
-func (t HttpTunnel) dialProxy() (net.Conn, error) {
-	if !t.isTls {
-		return t.parentDialer.Dial("tcp", t.proxyAddr)
-	}
-	return tls.DialWithDialer(t.parentDialer, "tcp", t.proxyAddr, t.tlsConfig)
-}
-
-// Dial is an implementation of net.Dialer, and returns a TCP connection handle to the host that HTTP CONNECT reached.
-func (t HttpTunnel) Dial(network string, address string) (net.Conn, error) {
+func (t HttpConnectTunnel) DialContext(ctx context.Context, network string, address string) (net.Conn, error) {
 	if network != "tcp" {
 		return nil, fmt.Errorf("network type '%v' unsupported (only 'tcp')", network)
 	}
-	conn, err := t.dialProxy()
+	conn, err := t.dialProxy(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("http_tunnel: failed dialing to proxy: %v", err)
 	}
@@ -103,10 +107,16 @@ func (t HttpTunnel) Dial(network string, address string) (net.Conn, error) {
 		conn.Close()
 		return nil, fmt.Errorf("http_tunnel: failed proxying %d: %s", resp.StatusCode, resp.Status)
 	}
+
 	return conn, nil
 }
 
-func (t HttpTunnel) doRoundtrip(conn net.Conn, req *http.Request) (*http.Response, error) {
+// Dial is an implementation of net.Dialer, and returns a TCP connection handle to the host that HTTP CONNECT reached.
+func (t HttpConnectTunnel) Dial(network string, address string) (net.Conn, error) {
+	return t.DialContext(context.Background(), network, address)
+}
+
+func (t HttpConnectTunnel) doRoundtrip(conn net.Conn, req *http.Request) (*http.Response, error) {
 	if err := req.Write(conn); err != nil {
 		return nil, fmt.Errorf("http_tunnel: failed writing request: %v", err)
 	}
@@ -116,7 +126,7 @@ func (t HttpTunnel) doRoundtrip(conn net.Conn, req *http.Request) (*http.Respons
 
 }
 
-func (t HttpTunnel) performAuthChallengeResponse(resp *http.Response) (string, error) {
+func (t HttpConnectTunnel) performAuthChallengeResponse(resp *http.Response) (string, error) {
 	respAuthHdr := resp.Header.Get(hdrProxyAuthReq)
 	if !strings.Contains(respAuthHdr, t.auth.Type()+" ") {
 		return "", fmt.Errorf("http_tunnel: expected '%v' Proxy authentication, got: '%v'", t.auth.Type(), respAuthHdr)
@@ -124,4 +134,27 @@ func (t HttpTunnel) performAuthChallengeResponse(resp *http.Response) (string, e
 	splits := strings.SplitN(respAuthHdr, " ", 2)
 	challenge := splits[1]
 	return t.auth.ChallengeResponse(challenge), nil
+}
+
+// WARNING: this can leak a goroutine for as long as the underlying Dialer implementation takes to timeout
+// A Conn returned from a successful Dial after the context has been cancelled will be immediately closed.
+func dialContext(ctx context.Context, d proxy.Dialer, network, address string) (net.Conn, error) {
+	var (
+		conn net.Conn
+		done = make(chan struct{}, 1)
+		err  error
+	)
+	go func() {
+		conn, err = d.Dial(network, address)
+		close(done)
+		if conn != nil && ctx.Err() != nil {
+			conn.Close()
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case <-done:
+	}
+	return conn, err
 }

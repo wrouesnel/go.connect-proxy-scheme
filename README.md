@@ -1,24 +1,15 @@
-# HTTP CONNECT tunneling Go Dialer
+[![Build and Test](https://github.com/wrouesnel/poller_exporter/actions/workflows/integration.yml/badge.svg)](https://github.com/wrouesnel/poller_exporter/actions/workflows/integration.yml)
+[![Coverage Status](https://coveralls.io/repos/github/wrouesnel/poller_exporter/badge.svg?branch=main)](https://coveralls.io/github/wrouesnel/poller_exporter?branch=main)
 
-[![Travis Build](https://travis-ci.org/mwitkow/go-http-dialer.svg)](https://travis-ci.org/mwitkow/go-http-dialer)
-[![Go Report Card](https://goreportcard.com/badge/github.com/mwitkow/go-http-dialer)](http://goreportcard.com/report/mwitkow/go-http-dialer)
-[![GoDoc](http://img.shields.io/badge/GoDoc-Reference-blue.svg)](https://godoc.org/github.com/mwitkow/go-http-dialer)
-[![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+# HTTP Connect Scheme Support for golang.org/x/net/proxy
 
-A `net.Dialer` drop-in that establishes the TCP connection over an [HTTP CONNECT Tunnel](https://en.wikipedia.org/wiki/HTTP_tunnel#HTTP_CONNECT_tunneling).
+A [golang.org/x/net/proxy](https://pkg.go.dev/golang.org/x/net/proxy) compatible
+scheme registration  that establishes the TCP connection over an [HTTP CONNECT Tunnel](https://en.wikipedia.org/wiki/HTTP_tunnel#HTTP_CONNECT_tunneling).
 
-## Why?!
+This is a refactor of https://github.com/mwitkow/go-http-dialer to make it compatible
+with `golang.org/x/net/proxy`
 
-Some enterprises have fairly restrictive networking environments. They typically operate [HTTP forward proxies](https://en.wikipedia.org/wiki/Proxy_server) that require user authentication. These proxies usually allow  HTTPS (TCP to `:443`) to pass through the proxy using the [`CONNECT`](https://tools.ietf.org/html/rfc2616#section-9.9) method. The `CONNECT` method is basically a HTTP-negotiated "end-to-end" TCP stream... which is exactly what [`net.Conn`](https://golang.org/pkg/net/#Conn) is :)
-
-## But, really, why?
-
-Because if you want to call [gRPC](http://www.grpc.io/) services which are exposed publicly over `:443` TLS over an HTTP proxy, you can't.
-
-Also, this allows you to call any TCP service over HTTP `CONNECT`... if your proxy allows you to `¯\(ツ)/¯`
-
-## Supported features
-
+## Features
  - [x] unencrypted connection to proxy (e.g. `http://proxy.example.com:3128`
  - [x] TLS connection to proxy (customizeable) (e.g. `https://proxy.example.com`)
  - [x] customizeable for `Proxy-Authenticate`, with challenge-response semantics
@@ -26,10 +17,55 @@ Also, this allows you to call any TCP service over HTTP `CONNECT`... if your pro
  - [ ] appropriate `RemoteAddr` remapping
  
 
-## Usage with gRPC
+## Usage
 
+### Simple
 
+Just call `proxy.RegisterDialerType("http", connect_proxy_scheme.ConnectProxy)`
+somewhere in your application to register the handler for HTTP.
 
-## License
+Be aware that `HTTP_PROXY` and `HTTPS_PROXY` and related environment variables
+are not picked up automatically by `golang.org/x/net/proxy` because it does
+not have support for them (which this library adds). If you want to use
+environment variable configuration you'll need to write it yourself.
 
-`go-http-dialer` is released under the Apache 2.0 license. See the [LICENSE](LICENSE) file for details.
+### Worked Example
+
+```go
+package main
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"golang.org/x/net/proxy"
+	"github.com/wrouesnel/go.connect-proxy-scheme"
+)
+
+func init() {
+	proxy.RegisterDialerType("http", connect_proxy_scheme.ConnectProxy)
+}
+
+func main() {
+	u, err := url.Parse("http://some-squid-proxy:3128")
+	if err != nil {
+		panic(err)
+    }
+	
+	dialer, err := proxy.FromURL(u, proxy.Direct)
+	if err != nil {
+		panic(err)
+    }
+
+	tr := &http.Transport{
+		DialContext: proxy.DialContext,
+	}
+	client := http.Client{Transport: tr}
+	
+	resp, err := client.Get("http://google.com")
+	if err != nil {
+		panic(err)
+    }
+	
+	fmt.Println(resp)
+}
+```
