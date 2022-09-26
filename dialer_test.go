@@ -10,7 +10,7 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/samber/lo"
-	connect_proxy_scheme "github.com/wrouesnel/go-connect-proxy-scheme"
+	connect_proxy_scheme "github.com/wrouesnel/go.connect-proxy-scheme"
 	"golang.org/x/net/proxy"
 
 	. "gopkg.in/check.v1"
