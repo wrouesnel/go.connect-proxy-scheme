@@ -38,6 +38,12 @@ func New(proxyUrl *url.URL, dialer proxy.Dialer) (*HttpConnectTunnel, error) {
 		}
 	}
 
+	if proxyUrl.User != nil {
+		username := proxyUrl.User.Username()
+		password, _ := proxyUrl.User.Password()
+		t.auth = AuthBasic(username, password)
+	}
+
 	return t, nil
 }
 
